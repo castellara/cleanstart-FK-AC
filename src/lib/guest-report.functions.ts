@@ -1,5 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
-import { createLovableAiGatewayProvider } from "@/lib/ai-gateway.server";
+import { createOpenRouterProvider } from "@/lib/ai-gateway.server";
 import { generateText } from "ai";
 import { z } from "zod";
 
@@ -58,8 +58,8 @@ function extractJson(raw: string): unknown {
 export const generateGuestReport = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => GuestInput.parse(d))
   .handler(async ({ data }) => {
-    const LOVABLE_API_KEY = process.env.LOVABLE_API_KEY;
-    if (!LOVABLE_API_KEY) throw new Error("Missing LOVABLE_API_KEY");
+    const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
+    if (!OPENROUTER_API_KEY) throw new Error("Missing OPENROUTER_API_KEY");
 
     const transcript = data.messages
       .map((m) => `${m.role.toUpperCase()}: ${m.content}`)
@@ -67,8 +67,8 @@ export const generateGuestReport = createServerFn({ method: "POST" })
 
     const persona = data.tenure ?? null;
 
-    const gateway = createLovableAiGatewayProvider(LOVABLE_API_KEY);
-    const model = gateway("google/gemini-3-flash-preview");
+    const gateway = createOpenRouterProvider(OPENROUTER_API_KEY);
+    const model = gateway("openai/gpt-oss-120b:free");
 
     const system = `You are Clean Start's report writer. Read the conversation between the user and the Clean Start guide and produce a calm, plain-language personalized research summary.
 

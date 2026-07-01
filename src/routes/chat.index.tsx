@@ -2,6 +2,9 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
+import { useAuth } from "@/hooks/use-auth";
+import { supabase } from "@/integrations/supabase/client";
+import { createSession } from "@/lib/sessions";
 import { PrivacyBanner } from "@/components/PrivacyBanner";
 import {
   Conversation,
@@ -111,12 +114,62 @@ const CHIPS: Record<Tenure, { category: string; prompt: string }[]> = {
 
 function ChatPage() {
   const navigate = useNavigate();
+  const { user, loading: authLoading } = useAuth();
+
+  // Signed-in users see the same starting points as guests, plus (if they
+  // have one) the option to continue their most recently active session or
+  // explicitly start a blank new one.
+  const [recentSessionChecked, setRecentSessionChecked] = useState(false);
+  const [recentSession, setRecentSession] = useState<{ id: string; title: string } | null>(null);
+  useEffect(() => {
+    if (authLoading) return;
+    if (!user) {
+      setRecentSessionChecked(true);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from("sessions")
+        .select("id, title")
+        .eq("user_id", user.id)
+        .order("updated_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (cancelled) return;
+      setRecentSession(data ?? null);
+      setRecentSessionChecked(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, user]);
+
+  const goToRecentSession = () => {
+    if (recentSession) {
+      navigate({ to: "/chat/$sessionId", params: { sessionId: recentSession.id } });
+    }
+  };
+
+  const startBlankSession = async () => {
+    if (!user || creatingSession) return;
+    setCreatingSession(true);
+    try {
+      const sessionId = await createSession(user.id);
+      navigate({ to: "/chat/$sessionId", params: { sessionId } });
+    } catch {
+      toast.error("Couldn't start a new conversation");
+      setCreatingSession(false);
+    }
+  };
+
   const [initialMessages, setInitialMessages] = useState<UIMessage[] | null>(null);
   const [tenure, setTenure] = useState<Tenure | null>(null);
   const [location, setLocation] = useState<Location | null>(null);
   const [zipStepDone, setZipStepDone] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [input, setInput] = useState("");
+  const [creatingSession, setCreatingSession] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -235,11 +288,31 @@ function ChatPage() {
     setTimeout(() => inputRef.current?.focus(), 0);
   };
 
-  const handleSend = (text: string) => {
+  const handleSend = async (text: string) => {
     const trimmed = text.trim();
-    if (!trimmed || isBusy) return;
-    if (!tenure) pickTenure("curious");
+    if (!trimmed || isBusy || creatingSession) return;
+    const effectiveTenure = tenure ?? "curious";
+    if (!tenure) pickTenure(effectiveTenure);
     if (!zipStepDone) setZipStepDone(true);
+
+    if (user) {
+      // Signed in: create a real session and hand off the first message to
+      // the persisted chat page instead of the ephemeral guest flow.
+      setCreatingSession(true);
+      try {
+        const sessionId = await createSession(user.id);
+        navigate({
+          to: "/chat/$sessionId",
+          params: { sessionId },
+          search: { persona: effectiveTenure, initialMessage: trimmed },
+        });
+      } catch {
+        toast.error("Couldn't start a new conversation");
+        setCreatingSession(false);
+      }
+      return;
+    }
+
     sendMessage({ text: trimmed });
     setInput("");
   };
@@ -260,10 +333,36 @@ function ChatPage() {
         ? 2
         : 3;
 
+  if (authLoading || !recentSessionChecked || creatingSession) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
   return (
     <>
       <PrivacyBanner />
       <div className="mx-auto flex h-[calc(100vh-12rem)] min-h-[500px] max-w-3xl flex-col px-4 pb-4 pt-4">
+        {user && recentSession && step !== 4 && (
+          <div className="mb-4 flex flex-col gap-3 rounded-xl border border-primary/30 bg-primary-light/30 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-foreground">Welcome back</p>
+              <p className="truncate text-xs text-muted-foreground">
+                Continue "{recentSession.title}", or start something new below.
+              </p>
+            </div>
+            <div className="flex shrink-0 gap-2">
+              <Button size="sm" onClick={goToRecentSession}>
+                Continue chat
+              </Button>
+              <Button size="sm" variant="outline" onClick={startBlankSession}>
+                Start new chat
+              </Button>
+            </div>
+          </div>
+        )}
         {step === 4 ? (
           <>
             {messages.filter((m) => m.role === "assistant").length >= 3 && (

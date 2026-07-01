@@ -7,7 +7,6 @@ import { Label } from "@/components/ui/label";
 import { Leaf, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { lovable } from "@/integrations/lovable";
 
 type Props = {
   open: boolean;
@@ -49,15 +48,13 @@ export function AuthModal({ open, onOpenChange, defaultTab = "signup" }: Props) 
   const handleGoogle = async () => {
     setLoading(true);
     try {
-      const result = await lovable.auth.signInWithOAuth("google", { redirect_uri: window.location.origin });
-      if (result.error) throw result.error;
-      if (!result.redirected) {
-        toast.success("Signed in with Google");
-        onOpenChange(false);
-      }
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: { redirectTo: window.location.origin },
+      });
+      if (error) throw error;
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Google sign-in failed");
-    } finally {
       setLoading(false);
     }
   };

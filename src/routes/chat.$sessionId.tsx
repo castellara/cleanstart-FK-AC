@@ -3,8 +3,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { z } from "zod";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
+import type { Session, User } from "@supabase/supabase-js";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
+import { createSession } from "@/lib/sessions";
 import { AuthModal } from "@/components/AuthModal";
 import { PrivacyBanner } from "@/components/PrivacyBanner";
 import {
@@ -34,6 +36,9 @@ import { toast } from "sonner";
 
 const searchSchema = z.object({
   persona: z.enum(["renter", "homeowner", "curious"]).optional(),
+  // Handed off from /chat when a signed-in user's first message creates this
+  // session (see chat.index.tsx) — auto-sent once, then stripped from the URL.
+  initialMessage: z.string().optional(),
 });
 
 export const Route = createFileRoute("/chat/$sessionId")({
@@ -62,24 +67,25 @@ function rowToUIMessage(row: MessageRow): UIMessage {
   };
 }
 
+// Outer component: handles auth gating and loading this session's data.
+// The actual useChat-driven conversation view is a separate component keyed
+// on sessionId, so switching sessions fully remounts it — useChat only seeds
+// its message list from props once per mount, so without a remount, a stale
+// previous session's messages (or an empty list captured mid-load) would
+// leak into the next session's view.
 function ChatSessionPage() {
   const { sessionId } = Route.useParams();
-  const { persona: searchPersona } = Route.useSearch();
+  const { persona: searchPersona, initialMessage } = Route.useSearch();
   const { user, session: authSession, loading: authLoading } = useAuth();
-  const navigate = useNavigate();
 
   const [initialMessages, setInitialMessages] = useState<UIMessage[] | null>(null);
   const [persona, setPersona] = useState<string | null>(searchPersona ?? null);
   const [notFound, setNotFound] = useState(false);
-  const [feedbackSent, setFeedbackSent] = useState(false);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Load existing session + messages
   useEffect(() => {
-    if (!user) {
-      setInitialMessages(null);
-      return;
-    }
+    setInitialMessages(null);
+    setNotFound(false);
+    if (!user) return;
     let cancelled = false;
     (async () => {
       const [sessionRes, msgRes, profileRes] = await Promise.all([
@@ -97,44 +103,12 @@ function ChatSessionPage() {
         return;
       }
       setInitialMessages((msgRes.data ?? []).map(rowToUIMessage));
-      if (!persona && profileRes.data?.persona) setPersona(profileRes.data.persona);
+      setPersona((prev) => prev ?? profileRes.data?.persona ?? null);
     })();
     return () => {
       cancelled = true;
     };
   }, [sessionId, user]);
-
-  const transport = useMemo(
-    () =>
-      new DefaultChatTransport({
-        api: "/api/chat",
-        headers: () => ({
-          ...(authSession?.access_token
-            ? { Authorization: `Bearer ${authSession.access_token}` }
-            : {}),
-        }),
-        body: () => ({ sessionId, persona }),
-      }),
-    [sessionId, persona, authSession?.access_token],
-  );
-
-  const { messages, sendMessage, status, error } = useChat({
-    id: sessionId,
-    messages: initialMessages ?? [],
-    transport,
-    onError(err) {
-      toast.error(err.message || "Something went wrong");
-    },
-  });
-
-  // Refocus the composer
-  useEffect(() => {
-    if (status === "ready") textareaRef.current?.focus();
-  }, [status]);
-
-  useEffect(() => {
-    textareaRef.current?.focus();
-  }, [sessionId, initialMessages !== null]);
 
   if (authLoading) {
     return (
@@ -164,7 +138,7 @@ function ChatSessionPage() {
           It may have been deleted, or it belongs to a different account.
         </p>
         <Button asChild className="mt-6">
-          <Link to="/chat">Start a new one</Link>
+          <Link to="/history">Back to your sessions</Link>
         </Button>
       </div>
     );
@@ -177,6 +151,88 @@ function ChatSessionPage() {
       </div>
     );
   }
+
+  return (
+    <ChatConversation
+      key={sessionId}
+      sessionId={sessionId}
+      initialMessages={initialMessages}
+      persona={persona}
+      initialMessage={initialMessage}
+      user={user}
+      authSession={authSession}
+    />
+  );
+}
+
+function ChatConversation({
+  sessionId,
+  initialMessages,
+  persona,
+  initialMessage,
+  user,
+  authSession,
+}: {
+  sessionId: string;
+  initialMessages: UIMessage[];
+  persona: string | null;
+  initialMessage: string | undefined;
+  user: User;
+  authSession: Session | null;
+}) {
+  const navigate = useNavigate();
+  const [feedbackSent, setFeedbackSent] = useState(false);
+  const [creatingNext, setCreatingNext] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const sentInitialRef = useRef(false);
+
+  const transport = useMemo(
+    () =>
+      new DefaultChatTransport({
+        api: "/api/chat",
+        headers: () => ({
+          ...(authSession?.access_token
+            ? { Authorization: `Bearer ${authSession.access_token}` }
+            : {}),
+        }),
+        body: () => ({ sessionId, persona }),
+      }),
+    [sessionId, persona, authSession?.access_token],
+  );
+
+  const { messages, sendMessage, status, error } = useChat({
+    id: sessionId,
+    messages: initialMessages,
+    transport,
+    onError(err) {
+      toast.error(err.message || "Something went wrong");
+    },
+  });
+
+  // Auto-send the first message handed off from /chat (see chat.index.tsx),
+  // then strip it from the URL so a refresh doesn't resend it.
+  useEffect(() => {
+    if (!sentInitialRef.current && initialMessage && initialMessages.length === 0) {
+      sentInitialRef.current = true;
+      sendMessage({ text: initialMessage });
+      navigate({
+        to: "/chat/$sessionId",
+        params: { sessionId },
+        search: (prev) => ({ ...prev, initialMessage: undefined }),
+        replace: true,
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Refocus the composer
+  useEffect(() => {
+    if (status === "ready") textareaRef.current?.focus();
+  }, [status]);
+
+  useEffect(() => {
+    textareaRef.current?.focus();
+  }, []);
 
   const isBusy = status === "submitted" || status === "streaming";
 
@@ -202,11 +258,31 @@ function ChatSessionPage() {
         {/* Header */}
         <div className="mb-3 flex items-center justify-between gap-2">
           <Button variant="ghost" size="sm" asChild>
-            <Link to="/chat">
+            <Link to="/history">
               <ArrowLeft className="mr-1 h-4 w-4" /> All chats
             </Link>
           </Button>
           <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={creatingNext}
+              onClick={async () => {
+                if (creatingNext) return;
+                setCreatingNext(true);
+                try {
+                  const newId = await createSession(user.id);
+                  navigate({ to: "/chat/$sessionId", params: { sessionId: newId } });
+                } catch {
+                  toast.error("Couldn't start a new conversation");
+                } finally {
+                  setCreatingNext(false);
+                }
+              }}
+            >
+              {creatingNext ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
+              New chat
+            </Button>
             {messages.filter((m) => m.role === "assistant").length >= 3 && (
               <Button variant="outline" size="sm" asChild>
                 <Link to="/report" search={{ sessionId } as never}>

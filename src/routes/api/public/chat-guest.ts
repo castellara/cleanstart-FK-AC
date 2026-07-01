@@ -1,4 +1,4 @@
-import { createLovableAiGatewayProvider } from "@/lib/ai-gateway.server";
+import { createOpenRouterProvider } from "@/lib/ai-gateway.server";
 import { buildSystemPrompt, type Persona } from "@/lib/clean-start-prompt";
 import { createFileRoute } from "@tanstack/react-router";
 import { convertToModelMessages, streamText, type UIMessage } from "ai";
@@ -59,9 +59,9 @@ export const Route = createFileRoute("/api/public/chat-guest")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const LOVABLE_API_KEY = process.env.LOVABLE_API_KEY;
-        if (!LOVABLE_API_KEY) {
-          return new Response("Missing LOVABLE_API_KEY", { status: 500 });
+        const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
+        if (!OPENROUTER_API_KEY) {
+          return new Response("Missing OPENROUTER_API_KEY", { status: 500 });
         }
 
         const ip =
@@ -114,8 +114,8 @@ export const Route = createFileRoute("/api/public/chat-guest")({
         });
         const system = `${buildContextSystem(tenureValue, city, state, utility)}\n\n${baseSystem}`;
 
-        const gateway = createLovableAiGatewayProvider(LOVABLE_API_KEY);
-        const model = gateway("google/gemini-3-flash-preview");
+        const gateway = createOpenRouterProvider(OPENROUTER_API_KEY);
+        const model = gateway("openai/gpt-oss-120b:free");
 
         const result = streamText({
           model,

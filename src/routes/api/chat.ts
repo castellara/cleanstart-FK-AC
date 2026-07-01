@@ -1,4 +1,4 @@
-import { createLovableAiGatewayProvider } from "@/lib/ai-gateway.server";
+import { createOpenRouterProvider } from "@/lib/ai-gateway.server";
 import { buildSystemPrompt, type Persona } from "@/lib/clean-start-prompt";
 import { createClient } from "@supabase/supabase-js";
 import { createFileRoute } from "@tanstack/react-router";
@@ -34,9 +34,9 @@ export const Route = createFileRoute("/api/chat")({
 
         const SUPABASE_URL = process.env.SUPABASE_URL!;
         const SUPABASE_PUBLISHABLE_KEY = process.env.SUPABASE_PUBLISHABLE_KEY!;
-        const LOVABLE_API_KEY = process.env.LOVABLE_API_KEY;
-        if (!LOVABLE_API_KEY) {
-          return new Response("Missing LOVABLE_API_KEY", { status: 500 });
+        const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
+        if (!OPENROUTER_API_KEY) {
+          return new Response("Missing OPENROUTER_API_KEY", { status: 500 });
         }
 
         const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
@@ -76,8 +76,9 @@ export const Route = createFileRoute("/api/chat")({
               role: "user",
               content,
             });
-            // First user message becomes the session title
-            if (!session.title || session.title === "New conversation") {
+            // First user message becomes the session title (matches the
+            // sessions.title DB default in the schema migration).
+            if (!session.title || session.title === "New session") {
               await supabase
                 .from("sessions")
                 .update({
@@ -95,8 +96,8 @@ export const Route = createFileRoute("/api/chat")({
           assistantTurnCount,
         });
 
-        const gateway = createLovableAiGatewayProvider(LOVABLE_API_KEY);
-        const model = gateway("google/gemini-3-flash-preview");
+        const gateway = createOpenRouterProvider(OPENROUTER_API_KEY);
+        const model = gateway("openai/gpt-oss-120b:free");
 
         const result = streamText({
           model,

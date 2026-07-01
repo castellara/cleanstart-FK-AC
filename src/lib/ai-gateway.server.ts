@@ -1,50 +1,43 @@
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 
-const LOVABLE_AIG_RUN_ID_HEADER = "X-Lovable-AIG-Run-ID";
+// Free models are individually rate-limited upstream and can 429 under load
+// (documented OpenRouter behavior, not our own quota). These are fallback
+// candidates OpenRouter tries in order if the primary model errors/rate-limits
+// — see https://openrouter.ai/docs/guides/routing/model-fallbacks
+const FREE_MODEL_FALLBACKS = [
+  "openai/gpt-oss-120b:free",
+  "openai/gpt-oss-20b:free",
+  "google/gemma-4-31b-it:free",
+];
 
-export function createLovableAiGatewayProvider(lovableApiKey: string, initialRunId?: string) {
-  let runId = initialRunId?.trim() || undefined;
-  let resolveRunId: (value: string | undefined) => void = () => {};
-  let runIdResolved = false;
-  const runIdReady = new Promise<string | undefined>((resolve) => {
-    resolveRunId = resolve;
-  });
-
-  const publishRunId = (value?: string) => {
-    const next = value?.trim() || undefined;
-    if (!runId && next) runId = next;
-    if (!runIdResolved) {
-      runIdResolved = true;
-      resolveRunId(runId);
-    }
-  };
-  if (runId) publishRunId(runId);
-
-  const provider = createOpenAICompatible({
-    name: "lovable",
-    baseURL: "https://ai.gateway.lovable.dev/v1",
+export function createOpenRouterProvider(openRouterApiKey: string) {
+  return createOpenAICompatible({
+    name: "openrouter",
+    baseURL: "https://openrouter.ai/api/v1",
     headers: {
-      "Lovable-API-Key": lovableApiKey,
-      "X-Lovable-AIG-SDK": "vercel-ai-sdk",
+      Authorization: `Bearer ${openRouterApiKey}`,
+      // TODO: replace with the real production URL once one exists (OpenRouter
+      // uses this for its public model-usage rankings, not for auth/routing).
+      "HTTP-Referer": "https://cleanstart.app",
+      "X-Title": "Clean Start",
     },
+    // Inject OpenRouter's `models` fallback list into every request body so a
+    // rate-limited/erroring primary model automatically falls through to the
+    // next free model instead of failing the whole request.
     fetch: async (input, init) => {
-      const headers = new Headers(init?.headers);
-      if (runId && !headers.has(LOVABLE_AIG_RUN_ID_HEADER)) {
-        headers.set(LOVABLE_AIG_RUN_ID_HEADER, runId);
+      if (init?.body && typeof init.body === "string") {
+        try {
+          const parsed = JSON.parse(init.body) as { model?: string };
+          const primary = parsed.model;
+          const models = primary
+            ? [primary, ...FREE_MODEL_FALLBACKS.filter((m) => m !== primary)]
+            : FREE_MODEL_FALLBACKS;
+          init = { ...init, body: JSON.stringify({ ...parsed, models }) };
+        } catch {
+          // Body wasn't JSON (shouldn't happen for this API) — send as-is.
+        }
       }
-      try {
-        const response = await fetch(input, { ...init, headers });
-        publishRunId(response.headers.get(LOVABLE_AIG_RUN_ID_HEADER) ?? undefined);
-        return response;
-      } catch (error) {
-        publishRunId(undefined);
-        throw error;
-      }
+      return fetch(input, init);
     },
-  });
-
-  return Object.assign(provider, {
-    getRunId: () => runId,
-    waitForRunId: () => (runId ? Promise.resolve(runId) : runIdReady),
   });
 }

@@ -1,7 +1,8 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
+import { createSession } from "@/lib/sessions";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ArrowRight, FileText, Loader2, MessageCircle, Plus, Trash2 } from "lucide-react";
@@ -29,8 +30,10 @@ type SessionRow = {
 
 function HistoryPage() {
   const { user, loading: authLoading } = useAuth();
+  const navigate = useNavigate();
   const [sessions, setSessions] = useState<SessionRow[] | null>(null);
   const [loading, setLoading] = useState(false);
+  const [creating, setCreating] = useState(false);
 
   const load = async () => {
     if (!user) return;
@@ -48,6 +51,19 @@ function HistoryPage() {
   useEffect(() => {
     if (user) load();
   }, [user]);
+
+  const handleNewSession = async () => {
+    if (!user || creating) return;
+    setCreating(true);
+    try {
+      const sessionId = await createSession(user.id);
+      navigate({ to: "/chat/$sessionId", params: { sessionId } });
+    } catch {
+      toast.error("Couldn't start a new conversation");
+    } finally {
+      setCreating(false);
+    }
+  };
 
   const handleDelete = async (id: string) => {
     if (!confirm("Delete this conversation and its report?")) return;
@@ -88,10 +104,9 @@ function HistoryPage() {
             Pick up a past conversation or open its summary.
           </p>
         </div>
-        <Button asChild>
-          <Link to="/chat">
-            <Plus className="mr-1 h-4 w-4" /> New conversation
-          </Link>
+        <Button onClick={handleNewSession} disabled={creating}>
+          {creating ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Plus className="mr-1 h-4 w-4" />}
+          New conversation
         </Button>
       </div>
 
@@ -108,26 +123,33 @@ function HistoryPage() {
           <p className="mt-1 text-sm text-muted-foreground">
             Start a conversation to get personalized clean energy guidance.
           </p>
-          <Button className="mt-5" asChild>
-            <Link to="/chat">Start chatting</Link>
+          <Button className="mt-5" onClick={handleNewSession} disabled={creating}>
+            {creating ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
+            Start chatting
           </Button>
         </div>
       )}
 
       {sessions && sessions.length > 0 && (
         <ul className="space-y-3">
-          {sessions.map((s) => {
+          {sessions.map((s, i) => {
             const msgCount = s.messages?.[0]?.count ?? 0;
             const hasReport = (s.reports?.length ?? 0) > 0;
+            const isCurrent = i === 0;
             return (
               <li
                 key={s.id}
-                className="group rounded-xl border border-border bg-card p-4 transition hover:border-primary/40"
+                className={`group rounded-xl border p-4 transition hover:border-primary/40 ${
+                  isCurrent ? "border-primary/50 bg-primary-light/20" : "border-border bg-card"
+                }`}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <h3 className="truncate font-medium">{s.title}</h3>
+                      {isCurrent && (
+                        <Badge variant="outline" className="shrink-0 border-primary text-primary-dark">Current</Badge>
+                      )}
                       {s.is_complete && (
                         <Badge variant="secondary" className="shrink-0">Complete</Badge>
                       )}
