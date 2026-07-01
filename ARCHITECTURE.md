@@ -1,0 +1,95 @@
+# Clean Start — Architecture Overview
+
+This document explains how the Clean Start app is built and hosted today, and how it got here. It's written to be readable by both technical and non-technical team members — technical details are included, but explained in plain language.
+
+Clean Start is a chat-based guide that helps people explore clean energy options (solar, heat pumps, EVs, efficiency upgrades) for their home, and produces a personalized summary report at the end of a conversation.
+
+## 1. Where we came from
+
+The app was originally built with [Lovable](https://lovable.dev), an AI-assisted app builder. Lovable didn't just generate the code — it also *managed the infrastructure the app ran on*:
+
+- **Database**: Lovable automatically provisioned a [Supabase](https://supabase.com) database (Postgres) for the project.
+- **AI model**: Chat replies were generated through Lovable's own "AI Gateway," which proxied requests to Google's Gemini model.
+- **Sign-in**: Google/Apple/Microsoft sign-in went through Lovable's own auth service before handing off to Supabase.
+- **Testing/preview**: The app could only really be run and tested inside Lovable's own environment, since all of the above only worked with credentials Lovable held internally.
+
+This worked well for one person building solo, but created two problems once more people wanted to contribute:
+
+1. Any usage (chatting, testing) consumed the *project owner's* Lovable credits — there was no way to spread that cost or give a teammate their own account for it.
+2. Contributors were implicitly required to use Lovable itself, since nothing could be run or tested outside of it.
+
+## 2. The migration
+
+To make the app independent of any one person's Lovable account — while still keeping Lovable available as an *editor*, if wanted — we replaced each Lovable-managed piece with an equivalent, independently-owned service:
+
+| Piece | Before | Now |
+|---|---|---|
+| Database & user accounts | Lovable-provisioned Supabase project | Our own [Supabase](https://supabase.com) project |
+| AI model access | Lovable's AI Gateway (Gemini only) | [OpenRouter](https://openrouter.ai) (many models, currently a free one) |
+| Sign-in (Google, etc.) | Lovable's auth proxy | Supabase's built-in sign-in, directly |
+| Hosting | Lovable Cloud | [Vercel](https://vercel.com) |
+| Local testing | Not possible without Lovable | Fully possible on any developer's machine |
+
+Along the way we also found and fixed a few pre-existing bugs this work surfaced (e.g. new chat sessions weren't always being saved correctly, and conversations weren't getting proper titles) — these weren't related to the migration itself, just issues that testing uncovered.
+
+## 3. How the app works now
+
+### 3.1 The pieces
+
+```
+                    ┌─────────────────────┐
+                    │   Your browser      │
+                    │  (the Clean Start   │
+                    │   web app)          │
+                    └──────────┬──────────┘
+                               │
+                               ▼
+                    ┌─────────────────────┐
+                    │      Vercel         │
+                    │ (hosts the app and  │
+                    │  its server logic)  │
+                    └──────┬───────┬──────┘
+                           │       │
+                 ┌─────────┘       └─────────┐
+                 ▼                           ▼
+        ┌─────────────────┐        ┌──────────────────┐
+        │    Supabase      │        │    OpenRouter     │
+        │ (database +      │        │ (AI chat model)   │
+        │  sign-in)        │        │                    │
+        └─────────────────┘        └──────────────────┘
+```
+
+- **The web app** is built with [React](https://react.dev) and [TanStack Start](https://tanstack.com/start), a framework that lets the same project contain both the visual interface (what you see in the browser) and the server-side logic (code that needs to run privately, like talking to the database or the AI model with secret keys).
+- **Vercel** builds and hosts the app, and automatically redeploys it whenever new code is pushed to the connected branch.
+- **Supabase** stores all persistent data — user accounts, chat sessions, messages, and generated reports — and handles sign-in (email/password and Google). Each user can only ever see their own data; this is enforced directly by the database itself ("Row Level Security"), not just by the app's code.
+- **OpenRouter** is what actually generates the chat replies and reports. It acts as a switchboard to many different AI models; we're currently using a free one, with automatic fallback to a couple of alternatives if the primary one is temporarily overloaded (free models can be rate-limited during heavy use).
+
+### 3.2 A typical request
+
+When someone sends a chat message:
+1. The browser sends the message to a small piece of server code running on Vercel.
+2. That server code checks who the user is (via Supabase), saves the message to the database, and asks OpenRouter to generate a reply.
+3. The reply streams back to the browser as it's generated, and is also saved to the database once complete.
+
+### 3.3 Where you can run this
+
+The exact same codebase now runs in three places:
+- **Locally**, on any developer's own computer, for day-to-day development — see the setup steps in `AGENTS.md` / the repo's environment file.
+- **In production**, on Vercel, for real users.
+- **Inside Lovable**, in principle — Lovable can be pointed at our own Supabase project and given the right keys (instead of using its own built-in ones), so the visual editor can still be used going forward. This hasn't been tested yet.
+
+**Important**: all three of the above currently point at the *same* Supabase database. This is convenient, but it means everyone is sharing one live dataset. Structural changes to the database (adding/removing/renaming tables or fields) need to be made deliberately and coordinated with the team — a change made by one person immediately affects everyone else using the same database.
+
+### 3.4 Secrets and configuration
+
+The app needs a handful of credentials to run, split into two kinds:
+- **Public values** (safe to have in a local config file): the Supabase project's public web address and public API key.
+- **Private secrets** (never shared or committed to code): a Supabase key that bypasses normal access rules (used only by server-side code), and the OpenRouter API key.
+
+See `.env.example` in the repo for the full list and where each one goes. In production, these are configured directly in Vercel's project settings; for Lovable editing, they'd be configured in Lovable's own "Secrets" settings.
+
+## 4. Where things stand / what's next
+
+- The production deployment is currently connected to a personal fork (copy) of the GitHub repository, rather than the original one, because of GitHub permission limitations on the original repo. This is a temporary arrangement — the plan is to merge this work back into the original repository once ready.
+- Editing the app inside Lovable, using our own Supabase project instead of Lovable's, is expected to work but hasn't been tried yet.
+- A couple of smaller product gaps were identified during testing (e.g. a user's stated persona/situation isn't currently saved to their account) and are tracked as follow-up work rather than fixed as part of this migration.
