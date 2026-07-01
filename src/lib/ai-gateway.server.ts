@@ -16,9 +16,9 @@ export function createOpenRouterProvider(openRouterApiKey: string) {
     baseURL: "https://openrouter.ai/api/v1",
     headers: {
       Authorization: `Bearer ${openRouterApiKey}`,
-      // TODO: replace with the real production URL once one exists (OpenRouter
-      // uses this for its public model-usage rankings, not for auth/routing).
-      "HTTP-Referer": "https://cleanstart.app",
+      // OpenRouter uses this for its public model-usage rankings, not for
+      // auth/routing.
+      "HTTP-Referer": "https://cleanstart-smoky.vercel.app",
       "X-Title": "Clean Start",
     },
     // Inject OpenRouter's `models` fallback list into every request body so a
