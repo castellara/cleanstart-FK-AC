@@ -1,23 +1,16 @@
-<!-- LOVABLE:BEGIN -->
-> [!IMPORTANT]
-> This project is connected to [Lovable](https://lovable.dev), synced to the
-> `lovable-dev` branch (not `main`). Avoid rewriting published git history on
-> `lovable-dev` — force pushing, or rebasing/amending/squashing commits that
-> are already pushed — as it rewrites history on Lovable's side and the user
-> will likely lose their project history.
->
-> Commits you push to `lovable-dev` sync back to Lovable and show up in the
-> editor, so keep that branch in a working state.
-<!-- LOVABLE:END -->
-
 ## Contributing
 
-`main` is the deployed branch (Vercel builds from it) and is protected — no
-direct pushes or force-pushes. All changes land via PR, regardless of tool:
+This repo (`fkloosterman/cleanstart`) is the only one in active use. There
+is no Lovable-based editing here — Lovable remains connected to
+`jreddy777/cleanstart`'s `main` branch, but that's a separate, unrelated
+repo that we don't sync with or merge from/into.
 
-- Feature branches (Claude Code, other contributors): branch off `main`, PR
-  back into `main`.
-- Lovable edits: sync to `lovable-dev`, then PR `lovable-dev` into `main`.
+`mvp` is the working and production branch — Vercel builds from it. Both
+`main` and `mvp` are protected: no direct or force pushes, everything lands
+via PR.
 
-This keeps Lovable's auto-sync from colliding with everyone else's commits
-while still landing all changes in one shared history.
+- Branch off `mvp` for new work, PR back into `mvp`.
+- `main` is not actively used; don't rely on it being kept up to date.
+
+See `ONBOARDING.md` for the full new-contributor setup flow (Windows,
+agent-guided).
