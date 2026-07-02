@@ -148,6 +148,10 @@ hand.
    Open the printed local URL and confirm with the user that the app loads
    and they can sign in.
 
+   This intentionally doesn't cover the Supabase CLI or schema migrations —
+   that's out of scope for regular onboarding. See `DATABASE.md` if/when the
+   user actually needs to change the database schema.
+
 ---
 
 ## Example workflow: shipping a change

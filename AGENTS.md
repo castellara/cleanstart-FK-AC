@@ -14,3 +14,12 @@ GitHub branch rulesets: no direct or force pushes, everything lands via PR.
 
 See `ONBOARDING.md` for the full new-contributor setup flow (Windows,
 agent-guided).
+
+## Database schema changes
+
+Every environment (every developer's local machine, and production) points
+at the *same* Supabase database — there's no per-branch or per-PR database
+isolation. Never edit `supabase/migrations/` or run a migration against the
+shared project without reading `DATABASE.md` first; it's intentionally kept
+out of the regular onboarding flow because it needs more care than normal
+feature work.
