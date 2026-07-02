@@ -20,7 +20,7 @@ This worked well for one person building solo, but created two problems once mor
 
 ## 2. The migration
 
-To make the app independent of any one person's Lovable account — while still keeping Lovable available as an *editor*, if wanted — we replaced each Lovable-managed piece with an equivalent, independently-owned service:
+To make the app independent of any one person's Lovable account, we replaced each Lovable-managed piece with an equivalent, independently-owned service:
 
 | Piece | Before | Now |
 |---|---|---|
@@ -73,12 +73,13 @@ When someone sends a chat message:
 
 ### 3.3 Where you can run this
 
-The exact same codebase now runs in three places:
-- **Locally**, on any developer's own computer, for day-to-day development — see the setup steps in `AGENTS.md` / the repo's environment file.
+The exact same codebase now runs in two places:
+- **Locally**, on any developer's own computer, for day-to-day development — see `ONBOARDING.md` for setup.
 - **In production**, on Vercel, for real users.
-- **Inside Lovable**, in principle — Lovable can be pointed at our own Supabase project and given the right keys (instead of using its own built-in ones), so the visual editor can still be used going forward. This hasn't been tested yet.
 
-**Important**: all three of the above currently point at the *same* Supabase database. This is convenient, but it means everyone is sharing one live dataset. Structural changes to the database (adding/removing/renaming tables or fields) need to be made deliberately and coordinated with the team — a change made by one person immediately affects everyone else using the same database.
+There's no Lovable-based editing on this codebase going forward; Lovable remains connected to a separate, unrelated repo (`jreddy777/cleanstart`) that this project doesn't sync with. See `AGENTS.md` for the branch/contribution model.
+
+**Important**: both of the above currently point at the *same* Supabase database. This is convenient, but it means everyone is sharing one live dataset. Structural changes to the database (adding/removing/renaming tables or fields) need to be made deliberately and coordinated with the team — a change made by one person immediately affects everyone else using the same database.
 
 ### 3.4 Secrets and configuration
 
@@ -86,10 +87,9 @@ The app needs a handful of credentials to run, split into two kinds:
 - **Public values** (safe to have in a local config file): the Supabase project's public web address and public API key.
 - **Private secrets** (never shared or committed to code): a Supabase key that bypasses normal access rules (used only by server-side code), and the OpenRouter API key.
 
-See `.env.example` in the repo for the full list and where each one goes. In production, these are configured directly in Vercel's project settings; for Lovable editing, they'd be configured in Lovable's own "Secrets" settings.
+See `.env.example` in the repo for the full list and where each one goes. In production, these are configured directly in Vercel's project settings.
 
 ## 4. Where things stand / what's next
 
-- The production deployment is currently connected to a personal fork (copy) of the GitHub repository, rather than the original one, because of GitHub permission limitations on the original repo. This is a temporary arrangement — the plan is to merge this work back into the original repository once ready.
-- Editing the app inside Lovable, using our own Supabase project instead of Lovable's, is expected to work but hasn't been tried yet.
+- The production deployment is connected to a personal fork (`fkloosterman/cleanstart`) of the original GitHub repository (`jreddy777/cleanstart`), because of GitHub permission limitations on the original repo. Unlike earlier plans, this is now the permanent working setup, not a temporary one pending a merge back — see `AGENTS.md` for the current branch model.
 - A couple of smaller product gaps were identified during testing (e.g. a user's stated persona/situation isn't currently saved to their account) and are tracked as follow-up work rather than fixed as part of this migration.
