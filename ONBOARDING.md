@@ -33,12 +33,14 @@
 
 > **Note on repo state:** `fkloosterman/cleanstart` is the only repo in
 > active use — this is where the team develops, and Vercel builds
-> production from its **`mvp`** branch (not `main`). There's a separate
+> production from its **`mvp`** branch, which is also the repo's default
+> branch (cloning lands you there automatically). There's a separate
 > `jreddy777/cleanstart` repo with its own Lovable-connected `main` branch,
 > but it's unrelated to this workflow — we don't sync with or merge from/into
 > it, and there's no Lovable-based editing here. Both `main` and `mvp` on
-> this repo are protected — no direct pushes, everything lands via PR.
-> Feature branches branch off `mvp` and PR back into `mvp`.
+> this repo are protected via GitHub branch rulesets — no direct or force
+> pushes, everything lands via PR. Feature branches branch off `mvp` and PR
+> back into `mvp`.
 
 ## Phase 0 — Before any agent can help (do this yourself)
 
