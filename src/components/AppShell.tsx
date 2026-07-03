@@ -18,6 +18,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { user, signOut, loading } = useAuth();
   const [authOpen, setAuthOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const nav = NAV.filter((n) => n.to !== "/history" || user);
 
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground">
@@ -31,7 +32,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </Link>
 
           <nav className="hidden items-center gap-1 md:flex">
-            {NAV.map((n) => (
+            {nav.map((n) => (
               <Link
                 key={n.to}
                 to={n.to}
@@ -66,7 +67,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         {menuOpen && (
           <div className="border-t border-border bg-background px-4 py-3 md:hidden">
             <nav className="flex flex-col gap-1">
-              {NAV.map((n) => (
+              {nav.map((n) => (
                 <Link
                   key={n.to}
                   to={n.to}
