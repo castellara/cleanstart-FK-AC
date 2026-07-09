@@ -98,7 +98,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <footer className="border-t border-border bg-background py-6">
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-2 px-4 text-xs text-muted-foreground sm:flex-row">
           <p>Privacy-first · Vendor-neutral · © 2025 Clean Start</p>
-          <Link to="/about" className="hover:text-foreground">Privacy &amp; About</Link>
+          <Link to="/privacy" className="hover:text-foreground">Privacy &amp; About</Link>
         </div>
       </footer>
 
